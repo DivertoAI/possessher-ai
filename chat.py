@@ -2,8 +2,8 @@ from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline
 import os
 
 # Use the Hugging Face model repo name, not a local path
-# model_id = "deepseek-ai/deepseek-llm-7b-chat"
-model_id = "tiiuae/falcon-rw-1b"
+model_id = "deepseek-ai/deepseek-llm-7b-chat"
+# model_id = "tiiuae/falcon-rw-1b"
 token = os.getenv("HUGGINGFACE_TOKEN")
 
 # Load tokenizer and model using token for private access if needed
