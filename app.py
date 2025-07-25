@@ -10,7 +10,7 @@ import base64
 persona = {
     "name": "Miyume",
     "base_prompt": (
-        "anime girl, pink twin-tail hair, violet eyes, curvy body, wearing a black Japanese school uniform, "
+        "anime girl, pink twin-tail hair, violet eyes, curvy body"
         "intense yandere expression, seductive pose, ultra detailed, high quality, sharp lines"
     )
 }
