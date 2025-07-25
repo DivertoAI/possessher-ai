@@ -6,9 +6,13 @@ from prompts import get_random_prompt
 import os
 import base64
 
+# ✅ Stronger identity prompt for consistent visuals
 persona = {
-    "name": "Yandere AI",
-    "base_prompt": "a dangerously affectionate anime waifu, intense eyes, seductive expression"
+    "name": "Miyume",
+    "base_prompt": (
+        "anime girl, pink twin-tail hair, violet eyes, curvy body, wearing a black Japanese school uniform, "
+        "intense yandere expression, seductive pose, ultra detailed, high quality, sharp lines"
+    )
 }
 
 app = Flask(__name__)
@@ -21,9 +25,12 @@ def chat():
 
     ai_reply = generate_yandere_reply(user_prompt)
 
+    # ✅ Check for photo-related triggers in input
     trigger_keywords = ["show me", "picture", "photo", "image", "see you", "selfie"]
     if any(keyword in user_prompt.lower() for keyword in trigger_keywords):
-        image_prompt = f"{persona['base_prompt']}, {user_prompt}"
+        # ✅ Combine locked persona traits + user context
+        image_prompt = f"{persona['base_prompt']}, scene: {user_prompt}"
+
         image_path = generate_image("user1", image_prompt)
 
         if image_path and os.path.exists(image_path):
@@ -44,7 +51,7 @@ def chat():
 @app.route("/generate", methods=["POST"])
 def generate():
     user_id = request.json.get("user_id", "anon")
-    prompt = get_random_prompt()
+    prompt = f"{persona['base_prompt']}, {get_random_prompt()}"
     image_path = generate_image(user_id, prompt)
     return send_file(image_path, mimetype='image/png')
 
