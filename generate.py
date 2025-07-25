@@ -38,7 +38,7 @@ os.makedirs(output_dir, exist_ok=True)
 BASE_PROMPT = (
     "masterpiece, best quality, yandere anime waifu, consistent face, intense eyes, "
     "seductive expression, beautiful detailed face, long hair, soft lighting, blush, "
-    "bare shoulders, slim waist, big boobs, beautiful big butt, nude, nsfw"
+    "bare shoulders, slim waist, large boobs, beautiful large butt, nude, nsfw"
 )
 
 # 🚫 Negative prompt to reduce artifacts and censorship
