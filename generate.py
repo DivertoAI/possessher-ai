@@ -2,22 +2,26 @@ from diffusers import StableDiffusionPipeline
 import torch
 from datetime import datetime
 import os
+import glob
 
 # Constants
 model_repo = "gsdf/Counterfeit-V2.5"
 local_model_path = "/workspace/models/Counterfeit-V2.5"
 output_dir = "./outputs/generated"
 
-# Download model if not cached locally
-if not os.path.isdir(local_model_path) or not os.listdir(local_model_path):
+# Detect if model is already downloaded as a snapshot
+snapshot_dirs = glob.glob(os.path.join(local_model_path, "models--gsdf--Counterfeit-V2.5", "snapshots", "*"))
+
+if snapshot_dirs:
+    actual_model_path = snapshot_dirs[0]
     pipe = StableDiffusionPipeline.from_pretrained(
-        model_repo,
-        cache_dir=local_model_path,
+        actual_model_path,
         torch_dtype=torch.float16
     )
 else:
     pipe = StableDiffusionPipeline.from_pretrained(
-        local_model_path,
+        model_repo,
+        cache_dir=local_model_path,
         torch_dtype=torch.float16
     )
 
