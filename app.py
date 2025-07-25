@@ -1,9 +1,13 @@
 from flask import Flask, request, jsonify, send_file
+from flask_cors import CORS  # 🆕 Import CORS module
 from chat import generate_yandere_reply
 from generate import generate_image
 from prompts import get_random_prompt
 
 app = Flask(__name__)
+
+# ✅ Enable CORS for your frontend origin
+CORS(app, origins=["http://localhost:3000"])
 
 @app.route("/chat", methods=["POST"])
 def chat():
