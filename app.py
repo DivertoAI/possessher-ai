@@ -4,20 +4,15 @@ from chat import generate_yandere_reply
 from generate import generate_image
 from prompts import get_random_prompt
 import os
+import base64
 
-# ✅ Define persona used for triggered image generation in chat
 persona = {
     "name": "Yandere AI",
     "base_prompt": "a dangerously affectionate anime waifu, intense eyes, seductive expression"
 }
 
 app = Flask(__name__)
-
-# ✅ Allow CORS from your frontend
 CORS(app, origins=["http://localhost:3000"])
-
-# ✅ Ensure static file serving for generated images
-app.static_folder = "outputs"  # matches your generate_image output_dir
 
 @app.route("/chat", methods=["POST"])
 def chat():
@@ -26,15 +21,22 @@ def chat():
 
     ai_reply = generate_yandere_reply(user_prompt)
 
-    # 🔥 Keyword-triggered image generation
-    trigger_keywords = ["show me", "picture", "photo", "image", "see you"]
+    trigger_keywords = ["show me", "picture", "photo", "image", "see you", "selfie"]
     if any(keyword in user_prompt.lower() for keyword in trigger_keywords):
         image_prompt = f"{persona['base_prompt']}, {user_prompt}"
         image_path = generate_image("user1", image_prompt)
 
+        if image_path and os.path.exists(image_path):
+            with open(image_path, "rb") as f:
+                image_bytes = f.read()
+            image_base64 = base64.b64encode(image_bytes).decode("utf-8")
+            return jsonify({
+                "reply": ai_reply,
+                "image_base64": image_base64
+            })
+
         return jsonify({
-            "reply": ai_reply,
-            "image_url": f"/static/{os.path.basename(image_path)}"
+            "reply": ai_reply + "\n\n⚠️ But I couldn't find the photo... try again?"
         })
 
     return jsonify({ "reply": ai_reply })
