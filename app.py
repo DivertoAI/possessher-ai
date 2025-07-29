@@ -19,10 +19,9 @@ persona = {
 
 # 🔐 Supabase Setup
 SUPABASE_URL = "https://vfejiqpioxmqkunpqgqs.supabase.co"
-SUPABASE_SERVICE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZmZWppcXBpb3htcWt1bnBxZ3FzIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1MzQ0OTQ2MywiZXhwIjoyMDY5MDI1NDYzfQ.dtVFob_t-wLF_NxEiRMKKNcTJbUH08qmtc1iREpElok"  # Replace this securely
+SUPABASE_SERVICE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZmZWppcXBpb3htcWt1bnBxZ3FzIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1MzQ0OTQ2MywiZXhwIjoyMDY5MDI1NDYzfQ.dtVFob_t-wLF_NxEiRMKKNcTJbUH08qmtc1iREpElok"
 
 app = Flask(__name__)
-# CORS(app, origins=["http://localhost:3000"])
 CORS(app, origins=["http://localhost:3000", "https://possessher-ai-frontend.vercel.app"])
 
 # 🔎 Check if user is Pro
@@ -42,33 +41,34 @@ def check_is_pro(email):
     return data[0].get("is_pro", False)
 
 # 📊 Check if usage limit reached (monthly cap)
-def check_usage_limit(email, usage_type, max_limit=3):  # 3 is your monthly free limit
+def check_usage_limit(email, usage_type, max_limit=3):
     current_month = datetime.utcnow().strftime("%Y-%m")
+    table = "image_logs" if usage_type == "image" else "chat_logs"
     headers = {
         "apikey": SUPABASE_SERVICE_KEY,
         "Authorization": f"Bearer {SUPABASE_SERVICE_KEY}",
         "Accept": "application/json"
     }
-
     r = requests.get(
-        f"{SUPABASE_URL}/rest/v1/usage_limits?email=eq.{email}&type=eq.{usage_type}",
+        f"{SUPABASE_URL}/rest/v1/{table}?email=eq.{email}",
         headers=headers
     )
 
     try:
         data = r.json()
         if not isinstance(data, list):
-            print(f"[ERROR] Invalid usage_limits response: {data}")
+            print(f"[ERROR] Invalid {table} response: {data}")
             return False
-        monthly_count = sum(1 for record in data if record.get("date", "").startswith(current_month))
+        monthly_count = sum(1 for record in data if record.get("timestamp", "").startswith(current_month))
         return monthly_count < max_limit
     except Exception as e:
-        print(f"[ERROR] Failed to parse usage_limits: {e}")
+        print(f"[ERROR] Failed to parse {table} data: {e}")
         return False
 
 # 📝 Record usage
 def record_usage(email, usage_type):
-    today = datetime.utcnow().strftime("%Y-%m-%d")
+    timestamp = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
+    table = "image_logs" if usage_type == "image" else "chat_logs"
     headers = {
         "apikey": SUPABASE_SERVICE_KEY,
         "Authorization": f"Bearer {SUPABASE_SERVICE_KEY}",
@@ -76,10 +76,9 @@ def record_usage(email, usage_type):
     }
     payload = {
         "email": email,
-        "type": usage_type,
-        "date": today
+        "timestamp": timestamp
     }
-    requests.post(f"{SUPABASE_URL}/rest/v1/usage_limits", headers=headers, json=payload)
+    requests.post(f"{SUPABASE_URL}/rest/v1/{table}", headers=headers, json=payload)
 
 # 💬 Chat endpoint
 @app.route("/chat", methods=["POST"])
