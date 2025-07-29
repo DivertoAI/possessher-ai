@@ -69,7 +69,10 @@ def record_usage(email, usage_type):
 @app.route("/chat", methods=["POST"])
 def chat():
     user_messages = request.json.get("messages", [])
-    user_prompt = user_messages[-1]["content"]
+    if not user_messages or not isinstance(user_messages, list):
+        return jsonify({ "reply": "Invalid message input." }), 400
+
+    user_prompt = user_messages[-1].get("content", "").strip()
     email = request.json.get("email")
 
     if not email:
@@ -98,6 +101,7 @@ def chat():
 
             if not is_pro:
                 record_usage(email, "image")
+
             return jsonify({
                 "reply": ai_reply,
                 "image_base64": image_base64
