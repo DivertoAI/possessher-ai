@@ -35,10 +35,13 @@ def check_is_pro(email):
         headers=headers
     )
     data = r.json()
-    return data[0]["is_pro"] if data else False
+    if not data or not isinstance(data, list) or len(data) == 0:
+        print(f"[WARN] No profile found for {email}")
+        return False
+    return data[0].get("is_pro", False)
 
 # 📊 Check if usage limit reached (for free users)
-def check_usage_limit(email, usage_type):
+def check_usage_limit(email, usage_type, max_limit=20):
     today = datetime.utcnow().strftime("%Y-%m-%d")
     headers = {
         "apikey": SUPABASE_SERVICE_KEY,
@@ -48,7 +51,7 @@ def check_usage_limit(email, usage_type):
         f"{SUPABASE_URL}/rest/v1/usage_limits?email=eq.{email}&type=eq.{usage_type}&date=eq.{today}",
         headers=headers
     )
-    return len(r.json()) == 0
+    return len(r.json()) < max_limit
 
 # 📝 Record usage (for free users)
 def record_usage(email, usage_type):
