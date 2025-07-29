@@ -42,19 +42,29 @@ def check_is_pro(email):
     return data[0].get("is_pro", False)
 
 # 📊 Check if usage limit reached (monthly cap)
-def check_usage_limit(email, usage_type, max_limit=3):
+def check_usage_limit(email, usage_type, max_limit=3):  # 3 is your monthly free limit
     current_month = datetime.utcnow().strftime("%Y-%m")
     headers = {
         "apikey": SUPABASE_SERVICE_KEY,
         "Authorization": f"Bearer {SUPABASE_SERVICE_KEY}",
+        "Accept": "application/json"
     }
+
     r = requests.get(
         f"{SUPABASE_URL}/rest/v1/usage_limits?email=eq.{email}&type=eq.{usage_type}",
         headers=headers
     )
-    data = r.json()
-    monthly_count = sum(1 for record in data if record["date"].startswith(current_month))
-    return monthly_count < max_limit
+
+    try:
+        data = r.json()
+        if not isinstance(data, list):
+            print(f"[ERROR] Invalid usage_limits response: {data}")
+            return False
+        monthly_count = sum(1 for record in data if record.get("date", "").startswith(current_month))
+        return monthly_count < max_limit
+    except Exception as e:
+        print(f"[ERROR] Failed to parse usage_limits: {e}")
+        return False
 
 # 📝 Record usage
 def record_usage(email, usage_type):
