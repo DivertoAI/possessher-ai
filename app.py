@@ -19,7 +19,7 @@ persona = {
 
 # 🔐 Supabase Setup
 SUPABASE_URL = "https://vfejiqpioxmqkunpqgqs.supabase.co"
-SUPABASE_SERVICE_KEY = "YOUR_SUPABASE_SERVICE_KEY"  # Replace this securely
+SUPABASE_SERVICE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZmZWppcXBpb3htcWt1bnBxZ3FzIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1MzQ0OTQ2MywiZXhwIjoyMDY5MDI1NDYzfQ.dtVFob_t-wLF_NxEiRMKKNcTJbUH08qmtc1iREpElok"  # Replace this securely
 
 app = Flask(__name__)
 # CORS(app, origins=["http://localhost:3000"])
