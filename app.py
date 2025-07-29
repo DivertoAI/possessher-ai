@@ -40,20 +40,22 @@ def check_is_pro(email):
         return False
     return data[0].get("is_pro", False)
 
-# 📊 Check if usage limit reached (for free users)
-def check_usage_limit(email, usage_type, max_limit=20):
-    today = datetime.utcnow().strftime("%Y-%m-%d")
+# 📊 Check if usage limit reached (monthly cap)
+def check_usage_limit(email, usage_type, max_limit=3):
+    current_month = datetime.utcnow().strftime("%Y-%m")
     headers = {
         "apikey": SUPABASE_SERVICE_KEY,
         "Authorization": f"Bearer {SUPABASE_SERVICE_KEY}",
     }
     r = requests.get(
-        f"{SUPABASE_URL}/rest/v1/usage_limits?email=eq.{email}&type=eq.{usage_type}&date=eq.{today}",
+        f"{SUPABASE_URL}/rest/v1/usage_limits?email=eq.{email}&type=eq.{usage_type}",
         headers=headers
     )
-    return len(r.json()) < max_limit
+    data = r.json()
+    monthly_count = sum(1 for record in data if record["date"].startswith(current_month))
+    return monthly_count < max_limit
 
-# 📝 Record usage (for free users)
+# 📝 Record usage
 def record_usage(email, usage_type):
     today = datetime.utcnow().strftime("%Y-%m-%d")
     headers = {
@@ -68,7 +70,7 @@ def record_usage(email, usage_type):
     }
     requests.post(f"{SUPABASE_URL}/rest/v1/usage_limits", headers=headers, json=payload)
 
-# 💬 Chat endpoint with image check and filtering
+# 💬 Chat endpoint
 @app.route("/chat", methods=["POST"])
 def chat():
     user_messages = request.json.get("messages", [])
@@ -83,7 +85,7 @@ def chat():
 
     is_pro = check_is_pro(email)
     if not is_pro and not check_usage_limit(email, "chat"):
-        return jsonify({ "reply": "⚠️ Daily chat limit reached. Upgrade to Pro 💖" })
+        return jsonify({ "reply": "⚠️ Monthly chat limit reached. Upgrade to Pro 💖" })
 
     ai_reply = generate_yandere_reply(user_prompt)
 
@@ -92,7 +94,7 @@ def chat():
         prompt = f"{persona['base_prompt']}, scene: {user_prompt}"
         if not is_pro:
             if not check_usage_limit(email, "image"):
-                return jsonify({ "reply": "⚠️ Daily image limit reached. Upgrade to Pro 💖" })
+                return jsonify({ "reply": "⚠️ Monthly image limit reached. Upgrade to Pro 💖" })
             prompt = prompt.replace("large boobs", "modest figure").replace("large butt", "").replace("seductive pose", "cute pose")
 
         image_path = generate_image("user1", prompt)
@@ -117,7 +119,7 @@ def chat():
 
     return jsonify({ "reply": ai_reply })
 
-# 🎨 Generate image endpoint (random prompt version)
+# 🎨 Generate image endpoint
 @app.route("/generate", methods=["POST"])
 def generate():
     email = request.json.get("email")
@@ -128,7 +130,7 @@ def generate():
 
     is_pro = check_is_pro(email)
     if not is_pro and not check_usage_limit(email, "image"):
-        return jsonify({ "error": "⚠️ Daily image limit reached. Upgrade to Pro 💖" }), 403
+        return jsonify({ "error": "⚠️ Monthly image limit reached. Upgrade to Pro 💖" }), 403
 
     prompt = f"{persona['base_prompt']}, {get_random_prompt()}"
     if not is_pro:
@@ -141,7 +143,7 @@ def generate():
 
     return send_file(image_path, mimetype='image/png')
 
-# 💳 Gumroad Webhook to auto-upgrade users
+# 💳 Gumroad Webhook
 @app.route("/gumroad-webhook", methods=["POST"])
 def gumroad_webhook():
     payload = request.form
