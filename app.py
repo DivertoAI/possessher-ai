@@ -22,7 +22,8 @@ SUPABASE_URL = "https://vfejiqpioxmqkunpqgqs.supabase.co"
 SUPABASE_SERVICE_KEY = "YOUR_SUPABASE_SERVICE_KEY"  # Replace this securely
 
 app = Flask(__name__)
-CORS(app, origins=["http://localhost:3000"])
+# CORS(app, origins=["http://localhost:3000"])
+CORS(app, origins=["http://localhost:3000", "https://possessher-ai-frontend.vercel.app"])
 
 # 🔎 Check if user is Pro
 def check_is_pro(email):
