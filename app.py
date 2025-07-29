@@ -41,7 +41,7 @@ def check_is_pro(email):
     return data[0].get("is_pro", False)
 
 # 📊 Check if usage limit reached (monthly cap)
-def check_usage_limit(email, usage_type, max_limit=3):
+def check_usage_limit(user_id, usage_type, max_limit=3):
     current_month = datetime.utcnow().strftime("%Y-%m")
     table = "image_logs" if usage_type == "image" else "chat_logs"
     headers = {
@@ -50,7 +50,7 @@ def check_usage_limit(email, usage_type, max_limit=3):
         "Accept": "application/json"
     }
     r = requests.get(
-        f"{SUPABASE_URL}/rest/v1/{table}?email=eq.{email}",
+        f"{SUPABASE_URL}/rest/v1/{table}?user_id=eq.{user_id}",
         headers=headers
     )
 
@@ -66,7 +66,7 @@ def check_usage_limit(email, usage_type, max_limit=3):
         return False
 
 # 📝 Record usage
-def record_usage(email, usage_type):
+def record_usage(user_id, usage_type):
     timestamp = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
     table = "image_logs" if usage_type == "image" else "chat_logs"
     headers = {
@@ -75,7 +75,7 @@ def record_usage(email, usage_type):
         "Content-Type": "application/json"
     }
     payload = {
-        "email": email,
+        "user_id": user_id,
         "timestamp": timestamp
     }
     requests.post(f"{SUPABASE_URL}/rest/v1/{table}", headers=headers, json=payload)
@@ -89,12 +89,13 @@ def chat():
 
     user_prompt = user_messages[-1].get("content", "").strip()
     email = request.json.get("email")
+    user_id = request.json.get("user_id", email)
 
     if not email:
         return jsonify({ "reply": "Login required." }), 401
 
     is_pro = check_is_pro(email)
-    if not is_pro and not check_usage_limit(email, "chat"):
+    if not is_pro and not check_usage_limit(user_id, "chat"):
         return jsonify({ "reply": "⚠️ Monthly chat limit reached. Upgrade to Pro 💖" })
 
     ai_reply = generate_yandere_reply(user_prompt)
@@ -103,11 +104,11 @@ def chat():
     if any(keyword in user_prompt.lower() for keyword in trigger_keywords):
         prompt = f"{persona['base_prompt']}, scene: {user_prompt}"
         if not is_pro:
-            if not check_usage_limit(email, "image"):
+            if not check_usage_limit(user_id, "image"):
                 return jsonify({ "reply": "⚠️ Monthly image limit reached. Upgrade to Pro 💖" })
             prompt = prompt.replace("large boobs", "modest figure").replace("large butt", "").replace("seductive pose", "cute pose")
 
-        image_path = generate_image("user1", prompt)
+        image_path = generate_image(user_id, prompt)
 
         if image_path and os.path.exists(image_path):
             with open(image_path, "rb") as f:
@@ -115,7 +116,7 @@ def chat():
             image_base64 = base64.b64encode(image_bytes).decode("utf-8")
 
             if not is_pro:
-                record_usage(email, "image")
+                record_usage(user_id, "image")
 
             return jsonify({
                 "reply": ai_reply,
@@ -125,7 +126,7 @@ def chat():
         return jsonify({ "reply": ai_reply + "\n\n⚠️ But I couldn't find the photo... try again?" })
 
     if not is_pro:
-        record_usage(email, "chat")
+        record_usage(user_id, "chat")
 
     return jsonify({ "reply": ai_reply })
 
@@ -133,13 +134,13 @@ def chat():
 @app.route("/generate", methods=["POST"])
 def generate():
     email = request.json.get("email")
-    user_id = request.json.get("user_id", "anon")
+    user_id = request.json.get("user_id", email)
 
     if not email:
         return jsonify({ "error": "Login required." }), 401
 
     is_pro = check_is_pro(email)
-    if not is_pro and not check_usage_limit(email, "image"):
+    if not is_pro and not check_usage_limit(user_id, "image"):
         return jsonify({ "error": "⚠️ Monthly image limit reached. Upgrade to Pro 💖" }), 403
 
     prompt = f"{persona['base_prompt']}, {get_random_prompt()}"
@@ -149,7 +150,7 @@ def generate():
     image_path = generate_image(user_id, prompt)
 
     if not is_pro:
-        record_usage(email, "image")
+        record_usage(user_id, "image")
 
     return send_file(image_path, mimetype='image/png')
 
