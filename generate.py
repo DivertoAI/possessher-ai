@@ -5,66 +5,66 @@ import os
 import glob
 
 # Constants
-model_repo = "gsdf/Counterfeit-V2.5"
-local_model_path = "/workspace/models/Counterfeit-V2.5"
-output_dir = "./outputs/generated"
+MODEL_REPO = "gsdf/Counterfeit-V2.5"
+LOCAL_MODEL_PATH = "/workspace/models/Counterfeit-V2.5"
+OUTPUT_DIR = "./outputs/generated"
 
-# Detect if model is already downloaded as a snapshot
-snapshot_dirs = glob.glob(os.path.join(local_model_path, "models--gsdf--Counterfeit-V2.5", "snapshots", "*"))
+# Ensure output directory exists
+os.makedirs(OUTPUT_DIR, exist_ok=True)
 
-# Load the model
+# Try to find existing snapshot if already downloaded
+snapshot_dirs = glob.glob(os.path.join(
+    LOCAL_MODEL_PATH, "models--gsdf--Counterfeit-V2.5", "snapshots", "*"
+))
+
 if snapshot_dirs:
-    actual_model_path = snapshot_dirs[0]
+    model_path = snapshot_dirs[0]
+    print(f"[INFO] Using local model snapshot: {model_path}")
     pipe = StableDiffusionPipeline.from_pretrained(
-        actual_model_path,
+        model_path,
         torch_dtype=torch.float16,
-        safety_checker=None  # 🚫 Disable safety filters
+        safety_checker=None
     )
 else:
+    print("[INFO] Downloading model from Hugging Face hub...")
     pipe = StableDiffusionPipeline.from_pretrained(
-        model_repo,
-        cache_dir=local_model_path,
+        MODEL_REPO,
+        cache_dir=LOCAL_MODEL_PATH,
         torch_dtype=torch.float16,
-        safety_checker=None  # 🚫 Disable safety filters
+        safety_checker=None
     )
 
 # Move pipeline to GPU
 pipe.to("cuda")
 
-# Ensure output directory exists
-os.makedirs(output_dir, exist_ok=True)
-
-# 🧠 Persona Prompt: Upgraded for appeal and consistency
+# Core Prompt
 BASE_PROMPT = (
     "masterpiece, best quality, yandere anime waifu, consistent face, intense eyes, "
     "seductive expression, beautiful detailed face, long hair, soft lighting, blush, "
     "bare shoulders, slim waist, large boobs, beautiful large butt, nude, nsfw"
 )
 
-# 🚫 Negative prompt to reduce artifacts and censorship
 NEGATIVE_PROMPT = (
     "clothes, bra, shirt, pants, censorship, watermark, blurry, bad anatomy, extra limbs, "
     "poorly drawn, deformed, out of frame, cropped, text"
 )
 
-# 🔥 Image Generation Function
+# Generate Image
 def generate_image(user_id, user_prompt=None):
     timestamp = datetime.utcnow().strftime("%Y%m%d%H%M%S")
     filename = f"{user_id}_{timestamp}.png"
-    full_path = os.path.join(output_dir, filename)
+    full_path = os.path.join(OUTPUT_DIR, filename)
 
-    prompt = BASE_PROMPT
-    if user_prompt:
-        prompt += f", {user_prompt}"
+    full_prompt = f"{BASE_PROMPT}, {user_prompt}" if user_prompt else BASE_PROMPT
 
     try:
-        image = pipe(
-            prompt=prompt,
+        result = pipe(
+            prompt=full_prompt,
             negative_prompt=NEGATIVE_PROMPT,
             guidance_scale=7.5
-        ).images[0]
-
-        image.save(full_path)
+        )
+        result.images[0].save(full_path)
+        print(f"[SUCCESS] Image saved to {full_path}")
         return full_path
     except Exception as e:
         print(f"[ERROR] Image generation failed: {e}")
