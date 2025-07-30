@@ -65,6 +65,27 @@ def check_usage_limit(user_id, usage_type, max_limit=3):
         print(f"[ERROR] Failed to parse {table} data: {e}")
         return False
 
+# 🔢 Count usage (new helper)
+def count_usage(user_id, usage_type):
+    current_month = datetime.utcnow().strftime("%Y-%m")
+    table = "image_logs" if usage_type == "image" else "chat_logs"
+    headers = {
+        "apikey": SUPABASE_SERVICE_KEY,
+        "Authorization": f"Bearer {SUPABASE_SERVICE_KEY}",
+        "Accept": "application/json"
+    }
+    r = requests.get(
+        f"{SUPABASE_URL}/rest/v1/{table}?user_id=eq.{user_id}",
+        headers=headers
+    )
+    try:
+        data = r.json()
+        if not isinstance(data, list):
+            return 0
+        return sum(1 for record in data if record.get("timestamp", "").startswith(current_month))
+    except:
+        return 0
+
 # 📝 Record usage
 def record_usage(user_id, usage_type):
     timestamp = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -197,6 +218,32 @@ def gumroad_webhook():
         return "User updated and purchase logged", 200
     else:
         return "Error updating profile", 500
+
+# 📊 Scarcity info endpoint
+@app.route("/usage", methods=["POST"])
+def usage():
+    email = request.json.get("email")
+    user_id = request.json.get("user_id", email)
+
+    if not email:
+        return jsonify({ "error": "Login required." }), 401
+
+    is_pro = check_is_pro(email)
+    image_limit = 9999 if is_pro else 3
+    chat_limit = 9999 if is_pro else 5
+
+    image_used = count_usage(user_id, "image")
+    chat_used = count_usage(user_id, "chat")
+
+    return jsonify({
+        "is_pro": is_pro,
+        "image_limit": image_limit,
+        "chat_limit": chat_limit,
+        "image_used": image_used,
+        "chat_used": chat_used,
+        "image_remaining": max(image_limit - image_used, 0),
+        "chat_remaining": max(chat_limit - chat_used, 0)
+    })
 
 # 🚀 Start app
 if __name__ == "__main__":
