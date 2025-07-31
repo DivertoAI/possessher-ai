@@ -19,7 +19,7 @@ persona = {
 
 # 🔐 Supabase Setup
 SUPABASE_URL = "https://vfejiqpioxmqkunpqgqs.supabase.co"
-SUPABASE_SERVICE_KEY = os.getenv("SUPABASE_SERVICE_KEY", "your-default-key")  # Optional: set via env var
+SUPABASE_SERVICE_KEY ="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZmZWppcXBpb3htcWt1bnBxZ3FzIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1MzQ0OTQ2MywiZXhwIjoyMDY5MDI1NDYzfQ.dtVFob_t-wLF_NxEiRMKKNcTJbUH08qmtc1iREpElok"
 
 app = Flask(__name__)
 
@@ -29,20 +29,26 @@ CORS(app, resources={r"/*": {"origins": [
     "https://possessher-ai-frontend.vercel.app"
 ]}}, supports_credentials=True)
 
+# 🔄 Add CORS headers on every response
+@app.after_request
+def add_cors_headers(response):
+    origin = request.headers.get("Origin")
+    if origin in ["http://localhost:3000", "https://possessher-ai-frontend.vercel.app"]:
+        response.headers.add("Access-Control-Allow-Origin", origin)
+    response.headers.add("Access-Control-Allow-Credentials", "true")
+    response.headers.add("Access-Control-Allow-Headers", "Content-Type,Authorization")
+    response.headers.add("Access-Control-Allow-Methods", "GET,POST,OPTIONS")
+    return response
+
 # 🔎 Check if user is Pro
 def check_is_pro(email):
     headers = {
         "apikey": SUPABASE_SERVICE_KEY,
         "Authorization": f"Bearer {SUPABASE_SERVICE_KEY}",
     }
-    r = requests.get(
-        f"{SUPABASE_URL}/rest/v1/profiles?email=eq.{email}",
-        headers=headers
-    )
+    r = requests.get(f"{SUPABASE_URL}/rest/v1/profiles?email=eq.{email}", headers=headers)
     data = r.json()
-    if not data or not isinstance(data, list) or len(data) == 0:
-        return False
-    return data[0].get("is_pro", False)
+    return data and isinstance(data, list) and data[0].get("is_pro", False)
 
 # 📊 Check if usage limit reached
 def check_usage_limit(user_id, usage_type, max_limit=3):
@@ -53,10 +59,7 @@ def check_usage_limit(user_id, usage_type, max_limit=3):
         "Authorization": f"Bearer {SUPABASE_SERVICE_KEY}",
         "Accept": "application/json"
     }
-    r = requests.get(
-        f"{SUPABASE_URL}/rest/v1/{table}?user_id=eq.{user_id}",
-        headers=headers
-    )
+    r = requests.get(f"{SUPABASE_URL}/rest/v1/{table}?user_id=eq.{user_id}", headers=headers)
     try:
         data = r.json()
         if not isinstance(data, list):
@@ -75,10 +78,7 @@ def count_usage(user_id, usage_type):
         "Authorization": f"Bearer {SUPABASE_SERVICE_KEY}",
         "Accept": "application/json"
     }
-    r = requests.get(
-        f"{SUPABASE_URL}/rest/v1/{table}?user_id=eq.{user_id}",
-        headers=headers
-    )
+    r = requests.get(f"{SUPABASE_URL}/rest/v1/{table}?user_id=eq.{user_id}", headers=headers)
     try:
         data = r.json()
         if not isinstance(data, list):
@@ -103,8 +103,11 @@ def record_usage(user_id, usage_type):
     requests.post(f"{SUPABASE_URL}/rest/v1/{table}", headers=headers, json=payload)
 
 # 💬 Chat endpoint
-@app.route("/chat", methods=["POST"])
+@app.route("/chat", methods=["POST", "OPTIONS"])
 def chat():
+    if request.method == "OPTIONS":
+        return '', 200
+
     user_messages = request.json.get("messages", [])
     if not user_messages or not isinstance(user_messages, list):
         return jsonify({ "reply": "Invalid message input." }), 400
@@ -153,8 +156,11 @@ def chat():
     return jsonify({ "reply": ai_reply })
 
 # 🎨 Generate image endpoint
-@app.route("/generate", methods=["POST"])
+@app.route("/generate", methods=["POST", "OPTIONS"])
 def generate():
+    if request.method == "OPTIONS":
+        return '', 200
+
     email = request.json.get("email")
     user_id = request.json.get("user_id", email)
 
@@ -177,8 +183,11 @@ def generate():
     return send_file(image_path, mimetype='image/png')
 
 # 💳 Gumroad Webhook
-@app.route("/gumroad-webhook", methods=["POST"])
+@app.route("/gumroad-webhook", methods=["POST", "OPTIONS"])
 def gumroad_webhook():
+    if request.method == "OPTIONS":
+        return '', 200
+
     payload = request.form
     email = payload.get("email")
     sale_id = payload.get("sale_id")
@@ -221,8 +230,11 @@ def gumroad_webhook():
         return "Error updating profile", 500
 
 # 📊 Scarcity info endpoint
-@app.route("/usage", methods=["POST"])
+@app.route("/usage", methods=["POST", "OPTIONS"])
 def usage():
+    if request.method == "OPTIONS":
+        return '', 200
+
     email = request.json.get("email")
     user_id = request.json.get("user_id", email)
 
