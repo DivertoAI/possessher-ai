@@ -19,25 +19,19 @@ persona = {
 
 # 🔐 Supabase Setup
 SUPABASE_URL = "https://vfejiqpioxmqkunpqgqs.supabase.co"
-SUPABASE_SERVICE_KEY ="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZmZWppcXBpb3htcWt1bnBxZ3FzIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1MzQ0OTQ2MywiZXhwIjoyMDY5MDI1NDYzfQ.dtVFob_t-wLF_NxEiRMKKNcTJbUH08qmtc1iREpElok"
+SUPABASE_SERVICE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZmZWppcXBpb3htcWt1bnBxZ3FzIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1MzQ0OTQ2MywiZXhwIjoyMDY5MDI1NDYzfQ.dtVFob_t-wLF_NxEiRMKKNcTJbUH08qmtc1iREpElok"
 
 app = Flask(__name__)
+CORS(app, origins=["http://localhost:3000", "https://possessher-ai-frontend.vercel.app"], supports_credentials=True)
 
-# 🌍 CORS Setup
-CORS(app, resources={r"/*": {"origins": [
-    "http://localhost:3000",
-    "https://possessher-ai-frontend.vercel.app"
-]}}, supports_credentials=True)
-
-# 🔄 Add CORS headers on every response
 @app.after_request
 def add_cors_headers(response):
     origin = request.headers.get("Origin")
     if origin in ["http://localhost:3000", "https://possessher-ai-frontend.vercel.app"]:
-        response.headers.add("Access-Control-Allow-Origin", origin)
-    response.headers.add("Access-Control-Allow-Credentials", "true")
-    response.headers.add("Access-Control-Allow-Headers", "Content-Type,Authorization")
-    response.headers.add("Access-Control-Allow-Methods", "GET,POST,OPTIONS")
+        response.headers["Access-Control-Allow-Origin"] = origin
+    response.headers["Access-Control-Allow-Credentials"] = "true"
+    response.headers["Access-Control-Allow-Headers"] = "Content-Type,Authorization"
+    response.headers["Access-Control-Allow-Methods"] = "GET,POST,OPTIONS"
     return response
 
 # 🔎 Check if user is Pro
@@ -46,9 +40,15 @@ def check_is_pro(email):
         "apikey": SUPABASE_SERVICE_KEY,
         "Authorization": f"Bearer {SUPABASE_SERVICE_KEY}",
     }
-    r = requests.get(f"{SUPABASE_URL}/rest/v1/profiles?email=eq.{email}", headers=headers)
+    r = requests.get(
+        f"{SUPABASE_URL}/rest/v1/profiles?email=eq.{email}",
+        headers=headers
+    )
     data = r.json()
-    return data and isinstance(data, list) and data[0].get("is_pro", False)
+    if not data or not isinstance(data, list) or len(data) == 0:
+        print(f"[WARN] No profile found for {email}")
+        return False
+    return data[0].get("is_pro", False)
 
 # 📊 Check if usage limit reached
 def check_usage_limit(user_id, usage_type, max_limit=3):
@@ -59,14 +59,19 @@ def check_usage_limit(user_id, usage_type, max_limit=3):
         "Authorization": f"Bearer {SUPABASE_SERVICE_KEY}",
         "Accept": "application/json"
     }
-    r = requests.get(f"{SUPABASE_URL}/rest/v1/{table}?user_id=eq.{user_id}", headers=headers)
+    r = requests.get(
+        f"{SUPABASE_URL}/rest/v1/{table}?user_id=eq.{user_id}",
+        headers=headers
+    )
     try:
         data = r.json()
         if not isinstance(data, list):
+            print(f"[ERROR] Invalid {table} response: {data}")
             return False
         monthly_count = sum(1 for record in data if record.get("timestamp", "").startswith(current_month))
         return monthly_count < max_limit
-    except:
+    except Exception as e:
+        print(f"[ERROR] Failed to parse {table} data: {e}")
         return False
 
 # 🔢 Count usage
@@ -78,7 +83,10 @@ def count_usage(user_id, usage_type):
         "Authorization": f"Bearer {SUPABASE_SERVICE_KEY}",
         "Accept": "application/json"
     }
-    r = requests.get(f"{SUPABASE_URL}/rest/v1/{table}?user_id=eq.{user_id}", headers=headers)
+    r = requests.get(
+        f"{SUPABASE_URL}/rest/v1/{table}?user_id=eq.{user_id}",
+        headers=headers
+    )
     try:
         data = r.json()
         if not isinstance(data, list):
@@ -155,7 +163,7 @@ def chat():
 
     return jsonify({ "reply": ai_reply })
 
-# 🎨 Generate image endpoint
+# 🎨 Generate endpoint
 @app.route("/generate", methods=["POST", "OPTIONS"])
 def generate():
     if request.method == "OPTIONS":
@@ -182,12 +190,42 @@ def generate():
 
     return send_file(image_path, mimetype='image/png')
 
-# 💳 Gumroad Webhook
-@app.route("/gumroad-webhook", methods=["POST", "OPTIONS"])
-def gumroad_webhook():
+# 📊 Scarcity endpoint
+@app.route("/usage", methods=["POST", "OPTIONS"])
+def usage():
     if request.method == "OPTIONS":
         return '', 200
 
+    try:
+        data = request.get_json(force=True)
+        email = data.get("email")
+        user_id = data.get("user_id", email)
+    except Exception as e:
+        return jsonify({ "error": f"Invalid JSON: {str(e)}" }), 400
+
+    if not email:
+        return jsonify({ "error": "Login required." }), 401
+
+    is_pro = check_is_pro(email)
+    image_limit = 9999 if is_pro else 3
+    chat_limit = 9999 if is_pro else 5
+
+    image_used = count_usage(user_id, "image")
+    chat_used = count_usage(user_id, "chat")
+
+    return jsonify({
+        "is_pro": is_pro,
+        "image_limit": image_limit,
+        "chat_limit": chat_limit,
+        "image_used": image_used,
+        "chat_used": chat_used,
+        "image_remaining": max(image_limit - image_used, 0),
+        "chat_remaining": max(chat_limit - chat_used, 0)
+    })
+
+# 💳 Gumroad Webhook
+@app.route("/gumroad-webhook", methods=["POST"])
+def gumroad_webhook():
     payload = request.form
     email = payload.get("email")
     sale_id = payload.get("sale_id")
@@ -229,35 +267,6 @@ def gumroad_webhook():
     else:
         return "Error updating profile", 500
 
-# 📊 Scarcity info endpoint
-@app.route("/usage", methods=["POST", "OPTIONS"])
-def usage():
-    if request.method == "OPTIONS":
-        return '', 200
-
-    email = request.json.get("email")
-    user_id = request.json.get("user_id", email)
-
-    if not email:
-        return jsonify({ "error": "Login required." }), 401
-
-    is_pro = check_is_pro(email)
-    image_limit = 9999 if is_pro else 3
-    chat_limit = 9999 if is_pro else 5
-
-    image_used = count_usage(user_id, "image")
-    chat_used = count_usage(user_id, "chat")
-
-    return jsonify({
-        "is_pro": is_pro,
-        "image_limit": image_limit,
-        "chat_limit": chat_limit,
-        "image_used": image_used,
-        "chat_used": chat_used,
-        "image_remaining": max(image_limit - image_used, 0),
-        "chat_remaining": max(chat_limit - chat_used, 0)
-    })
-
-# 🚀 Start app
+# 🚀 Start server
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
