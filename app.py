@@ -19,10 +19,15 @@ persona = {
 
 # 🔐 Supabase Setup
 SUPABASE_URL = "https://vfejiqpioxmqkunpqgqs.supabase.co"
-SUPABASE_SERVICE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZmZWppcXBpb3htcWt1bnBxZ3FzIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1MzQ0OTQ2MywiZXhwIjoyMDY5MDI1NDYzfQ.dtVFob_t-wLF_NxEiRMKKNcTJbUH08qmtc1iREpElok"
+SUPABASE_SERVICE_KEY = os.getenv("SUPABASE_SERVICE_KEY", "your-default-key")  # Optional: set via env var
 
 app = Flask(__name__)
-CORS(app, origins=["http://localhost:3000", "https://possessher-ai-frontend.vercel.app"])
+
+# 🌍 CORS Setup
+CORS(app, resources={r"/*": {"origins": [
+    "http://localhost:3000",
+    "https://possessher-ai-frontend.vercel.app"
+]}}, supports_credentials=True)
 
 # 🔎 Check if user is Pro
 def check_is_pro(email):
@@ -36,11 +41,10 @@ def check_is_pro(email):
     )
     data = r.json()
     if not data or not isinstance(data, list) or len(data) == 0:
-        print(f"[WARN] No profile found for {email}")
         return False
     return data[0].get("is_pro", False)
 
-# 📊 Check if usage limit reached (monthly cap)
+# 📊 Check if usage limit reached
 def check_usage_limit(user_id, usage_type, max_limit=3):
     current_month = datetime.utcnow().strftime("%Y-%m")
     table = "image_logs" if usage_type == "image" else "chat_logs"
@@ -53,19 +57,16 @@ def check_usage_limit(user_id, usage_type, max_limit=3):
         f"{SUPABASE_URL}/rest/v1/{table}?user_id=eq.{user_id}",
         headers=headers
     )
-
     try:
         data = r.json()
         if not isinstance(data, list):
-            print(f"[ERROR] Invalid {table} response: {data}")
             return False
         monthly_count = sum(1 for record in data if record.get("timestamp", "").startswith(current_month))
         return monthly_count < max_limit
-    except Exception as e:
-        print(f"[ERROR] Failed to parse {table} data: {e}")
+    except:
         return False
 
-# 🔢 Count usage (new helper)
+# 🔢 Count usage
 def count_usage(user_id, usage_type):
     current_month = datetime.utcnow().strftime("%Y-%m")
     table = "image_logs" if usage_type == "image" else "chat_logs"
