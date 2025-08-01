@@ -34,6 +34,55 @@ def add_cors_headers(response):
     response.headers["Access-Control-Allow-Methods"] = "GET,POST,OPTIONS"
     return response
 
+def handle_referral(referred_id, referred_email, referred_by):
+    if not referred_by or referred_id == referred_by:
+        return
+
+    headers = {
+        "apikey": SUPABASE_SERVICE_KEY,
+        "Authorization": f"Bearer {SUPABASE_SERVICE_KEY}",
+        "Content-Type": "application/json"
+    }
+
+    # Check if already referred
+    check = requests.get(
+        f"{SUPABASE_URL}/rest/v1/referrals?referred_id=eq.{referred_id}",
+        headers=headers
+    )
+    if check.ok and check.json():
+        return  # already referred
+
+    # Save referral
+    requests.post(
+        f"{SUPABASE_URL}/rest/v1/referrals",
+        headers=headers,
+        json={ "referrer_id": referred_by, "referred_id": referred_id }
+    )
+
+    # Reward: add 5 to referrer's bonus
+    reward_sql = f"""
+    update profiles
+    set referral_bonus = coalesce(referral_bonus, 0) + 5
+    where id = '{referred_by}';
+    """
+    requests.post(
+        f"{SUPABASE_URL}/rest/v1/rpc/execute_sql",
+        headers=headers,
+        json={ "sql": reward_sql }
+    )
+
+    # Reward: add 2 to referred user's bonus
+    reward_sql_referred = f"""
+    update profiles
+    set referral_bonus = coalesce(referral_bonus, 0) + 2
+    where id = '{referred_id}';
+    """
+    requests.post(
+        f"{SUPABASE_URL}/rest/v1/rpc/execute_sql",
+        headers=headers,
+        json={ "sql": reward_sql_referred }
+    )
+
 # 🔎 Check if user is Pro
 def check_is_pro(email):
     headers = {
@@ -128,18 +177,31 @@ def chat():
         return jsonify({ "reply": "Login required." }), 401
 
     is_pro = check_is_pro(email)
+    
+    # Check chat quota if not pro
     if not is_pro and not check_usage_limit(user_id, "chat"):
         return jsonify({ "reply": "⚠️ Monthly chat limit reached. Upgrade to Pro 💖" })
 
     ai_reply = generate_yandere_reply(user_prompt)
 
+    # Check if the prompt should trigger image generation
     trigger_keywords = ["show me", "picture", "photo", "image", "see you", "selfie"]
-    if any(keyword in user_prompt.lower() for keyword in trigger_keywords):
+    wants_image = any(keyword in user_prompt.lower() for keyword in trigger_keywords)
+
+    if wants_image:
         prompt = f"{persona['base_prompt']}, scene: {user_prompt}"
+
+        # Check image quota if not pro
         if not is_pro:
             if not check_usage_limit(user_id, "image"):
                 return jsonify({ "reply": "⚠️ Monthly image limit reached. Upgrade to Pro 💖" })
-            prompt = prompt.replace("large boobs", "modest figure").replace("large butt", "").replace("seductive pose", "cute pose")
+
+            # Sanitize prompt for non-pro users
+            prompt = (
+                prompt.replace("large boobs", "modest figure")
+                      .replace("large butt", "")
+                      .replace("seductive pose", "cute pose")
+            )
 
         image_path = generate_image(user_id, prompt)
 
@@ -158,6 +220,7 @@ def chat():
 
         return jsonify({ "reply": ai_reply + "\n\n⚠️ But I couldn't find the photo... try again?" })
 
+    # Record chat usage for non-pro users
     if not is_pro:
         record_usage(user_id, "chat")
 
@@ -190,6 +253,7 @@ def generate():
 
     return send_file(image_path, mimetype='image/png')
 
+
 # 📊 Scarcity endpoint
 @app.route("/usage", methods=["POST", "OPTIONS"])
 def usage():
@@ -200,6 +264,8 @@ def usage():
         data = request.get_json(force=True)
         email = data.get("email")
         user_id = data.get("user_id", email)
+        referred_by = data.get("referred_by")
+        handle_referral(user_id, email, referred_by)
     except Exception as e:
         return jsonify({ "error": f"Invalid JSON: {str(e)}" }), 400
 
@@ -207,8 +273,24 @@ def usage():
         return jsonify({ "error": "Login required." }), 401
 
     is_pro = check_is_pro(email)
-    image_limit = 9999 if is_pro else 3
-    chat_limit = 9999 if is_pro else 5
+    bonus_count = 0
+    try:
+        headers = {
+            "apikey": SUPABASE_SERVICE_KEY,
+            "Authorization": f"Bearer {SUPABASE_SERVICE_KEY}"
+        }
+        r = requests.get(
+            f"{SUPABASE_URL}/rest/v1/profiles?select=referral_bonus&email=eq.{email}",
+            headers=headers
+        )
+        profile_data = r.json()
+        if profile_data and isinstance(profile_data, list):
+            bonus_count = profile_data[0].get("referral_bonus", 0)
+    except:
+        pass
+
+    image_limit = 9999 if is_pro else 3 + bonus_count
+    chat_limit = 9999 if is_pro else 5 + bonus_count
 
     image_used = count_usage(user_id, "image")
     chat_used = count_usage(user_id, "chat")
@@ -220,7 +302,8 @@ def usage():
         "image_used": image_used,
         "chat_used": chat_used,
         "image_remaining": max(image_limit - image_used, 0),
-        "chat_remaining": max(chat_limit - chat_used, 0)
+        "chat_remaining": max(chat_limit - chat_used, 0),
+        "referral_bonus": bonus_count
     })
 
 # 💳 Gumroad Webhook
