@@ -309,14 +309,23 @@ def usage():
 # 💳 Gumroad Webhook
 @app.route("/gumroad-webhook", methods=["POST"])
 def gumroad_webhook():
+    GUMROAD_SELLER_ID = "OvnNGbU5aHwrQvsUdZIksw=="
+
     payload = request.form
     email = payload.get("email")
     sale_id = payload.get("sale_id")
     product_name = payload.get("product_name")
+    seller_id = payload.get("seller_id")
 
+    # 🔒 Check if request came from Gumroad
+    if seller_id != GUMROAD_SELLER_ID:
+        return "Invalid seller_id", 403
+
+    # 🛑 Required fields
     if not email or not sale_id:
         return "Missing fields", 400
 
+    # 🧠 Supabase setup
     headers = {
         "apikey": SUPABASE_SERVICE_KEY,
         "Authorization": f"Bearer {SUPABASE_SERVICE_KEY}",
@@ -324,32 +333,34 @@ def gumroad_webhook():
         "Prefer": "return=minimal"
     }
 
+    # ✅ Upgrade user to Pro
     profile_payload = {
         "email": email,
         "is_pro": True
     }
-    upsert_profile = requests.post(
+    profile_response = requests.post(
         f"{SUPABASE_URL}/rest/v1/profiles",
         headers={**headers, "Prefer": "resolution=merge-duplicates"},
         json=profile_payload
     )
 
+    # 🛍️ Record purchase
     purchase_payload = {
         "email": email,
         "sale_id": sale_id,
         "product_name": product_name or "PossessHer AI Premium"
     }
-    requests.post(
+    purchase_response = requests.post(
         f"{SUPABASE_URL}/rest/v1/purchases",
         headers=headers,
         json=purchase_payload
     )
 
-    if upsert_profile.status_code in [200, 201, 204]:
+    if profile_response.status_code in [200, 201, 204]:
         return "User updated and purchase logged", 200
     else:
+        print(f"[ERROR] Failed to upsert profile: {profile_response.text}")
         return "Error updating profile", 500
-
 # 🚀 Start server
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
