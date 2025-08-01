@@ -317,49 +317,40 @@ def gumroad_webhook():
     product_name = payload.get("product_name")
     seller_id = payload.get("seller_id")
 
-    # 🔒 Check if request came from Gumroad
     if seller_id != GUMROAD_SELLER_ID:
         return "Invalid seller_id", 403
 
-    # 🛑 Required fields
     if not email or not sale_id:
         return "Missing fields", 400
 
-    # 🧠 Supabase setup
     headers = {
         "apikey": SUPABASE_SERVICE_KEY,
         "Authorization": f"Bearer {SUPABASE_SERVICE_KEY}",
-        "Content-Type": "application/json",
-        "Prefer": "return=minimal"
+        "Content-Type": "application/json"
     }
 
-    # ✅ Upgrade user to Pro
-    profile_payload = {
-        "email": email,
-        "is_pro": True
-    }
-    profile_response = requests.post(
-        f"{SUPABASE_URL}/rest/v1/profiles",
-        headers={**headers, "Prefer": "resolution=merge-duplicates"},
-        json=profile_payload
+    # ✅ Update is_pro flag
+    profile_response = requests.patch(
+        f"{SUPABASE_URL}/rest/v1/profiles?email=eq.{email}",
+        headers=headers,
+        json={"is_pro": True}
     )
 
     # 🛍️ Record purchase
-    purchase_payload = {
-        "email": email,
-        "sale_id": sale_id,
-        "product_name": product_name or "PossessHer AI Premium"
-    }
     purchase_response = requests.post(
         f"{SUPABASE_URL}/rest/v1/purchases",
-        headers=headers,
-        json=purchase_payload
+        headers={**headers, "Prefer": "return=minimal"},
+        json={
+            "email": email,
+            "sale_id": sale_id,
+            "product_name": product_name or "PossessHer AI Premium"
+        }
     )
 
-    if profile_response.status_code in [200, 201, 204]:
-        return "User updated and purchase logged", 200
+    if profile_response.status_code in [200, 204]:
+        return "User upgraded to Pro and purchase logged", 200
     else:
-        print(f"[ERROR] Failed to upsert profile: {profile_response.text}")
+        print(f"[ERROR] Failed to update is_pro: {profile_response.text}")
         return "Error updating profile", 500
 # 🚀 Start server
 if __name__ == "__main__":
