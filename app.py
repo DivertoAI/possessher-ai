@@ -307,6 +307,8 @@ def usage():
     })
 
 # 💳 Gumroad Webhook
+from datetime import datetime, timedelta
+
 @app.route("/gumroad-webhook", methods=["POST"])
 def gumroad_webhook():
     GUMROAD_SELLER_ID = "OvnNGbU5aHwrQvsUdZIksw=="
@@ -323,20 +325,28 @@ def gumroad_webhook():
     if not email or not sale_id:
         return "Missing fields", 400
 
+    expires_at = (datetime.utcnow() + timedelta(days=30)).isoformat() + "Z"
+
     headers = {
         "apikey": SUPABASE_SERVICE_KEY,
         "Authorization": f"Bearer {SUPABASE_SERVICE_KEY}",
         "Content-Type": "application/json"
     }
 
-    # ✅ Update is_pro flag
-    profile_response = requests.patch(
-        f"{SUPABASE_URL}/rest/v1/profiles?email=eq.{email}",
-        headers=headers,
-        json={"is_pro": True}
+    profile_payload = {
+        "email": email,
+        "is_pro": True,
+        "pro_expires_at": expires_at
+    }
+
+    # UPSERT into profiles
+    profile_response = requests.post(
+        f"{SUPABASE_URL}/rest/v1/profiles",
+        headers={**headers, "Prefer": "resolution=merge-duplicates"},
+        json=profile_payload
     )
 
-    # 🛍️ Record purchase
+    # Log purchase
     purchase_response = requests.post(
         f"{SUPABASE_URL}/rest/v1/purchases",
         headers={**headers, "Prefer": "return=minimal"},
@@ -347,11 +357,12 @@ def gumroad_webhook():
         }
     )
 
-    if profile_response.status_code in [200, 204]:
-        return "User upgraded to Pro and purchase logged", 200
+    if profile_response.status_code in [200, 201, 204]:
+        return "User upgraded and purchase logged", 200
     else:
-        print(f"[ERROR] Failed to update is_pro: {profile_response.text}")
-        return "Error updating profile", 500
+        print("[ERROR] Supabase profile upsert failed:", profile_response.text)
+        return "Failed to update profile", 500
+
 # 🚀 Start server
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
